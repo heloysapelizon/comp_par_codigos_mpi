@@ -13,12 +13,12 @@
  * No LAD:    srun -N 2 -n 8 ./pipeline
  */
 
+#include <stdlib.h>
 #include <stdio.h>
 #include <mpi.h>
 
 int main(int argc, char *argv[]) {
     int rank, size;
-    int mensagem;
     MPI_Status status;
 
     MPI_Init(&argc, &argv);
@@ -26,21 +26,42 @@ int main(int argc, char *argv[]) {
     MPI_Comm_size(MPI_COMM_WORLD, &size);
 
     /* receber da esquerda */
+    int TAM = (argc > 1) ? atoi(argv[1]) : 1000;
+    int *vetor = malloc(TAM * sizeof(int));
+    
     if (rank == 0)
-        mensagem = 0;                       /* o primeiro cria a mensagem */
+        for (int i = 0; i < TAM; i++)
+            vetor[i] = 0;                       /* o primeiro cria a mensagem */
     else
-        MPI_Recv(&mensagem, 1, MPI_INT, rank - 1, MPI_ANY_TAG,
+        MPI_Recv(vetor, TAM, MPI_INT, rank - 1, MPI_ANY_TAG,
                  MPI_COMM_WORLD, &status);
 
     /* processar */
-    mensagem += 1;
+    for (int i = 0; i < TAM; i++)
+        vetor[i] += 1;
 
     /* enviar para a direita */
-    if (rank == size - 1)
-        printf("Estagio %d (ultimo): mensagem = %d\n", rank, mensagem);
-    else
-        MPI_Send(&mensagem, 1, MPI_INT, rank + 1, 0, MPI_COMM_WORLD);
+        if (rank == size - 1) {
+        /* o último confere: todos devem valer 'size' (nº de estágios) */
+        int ok = 1;
+        for (int i = 0; i < TAM; i++) {
+            if (vetor[i] != size) {
+                printf("Estagio %d (ultimo): ERRO em vetor[%d] = %d (esperado %d)\n",
+                       rank, i, vetor[i], size);
+                ok = 0;
+                break;
+            }
+        }
+        if (ok)
+            printf("Estagio %d (ultimo): OK, todos os %d elementos = %d\n",
+                   rank, TAM, size);
+    } else {
+        MPI_Send(vetor, TAM, MPI_INT, rank + 1, 0, MPI_COMM_WORLD);
+    }
+
+    free(vetor);
 
     MPI_Finalize();
     return 0;
 }
+
